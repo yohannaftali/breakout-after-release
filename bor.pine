@@ -1,0 +1,620 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Credits to 
+// Squeeze Momentum Indicator [LazyBear]
+// - author: LazyBear
+// - url: https://www.tradingview.com/script/nqQ1DT5a-Squeeze-Momentum-Indicator-LazyBear/
+// Zigzag ++: 
+// - author: lucemanb
+// - url: https://www.tradingview.com/script/lj8djt1n-ZigZag/
+// - url: https://www.tradingview.com/script/rL52OTUT-ZigZag-lucemanb/
+
+//@version=5
+//©author=YohanNaftali
+
+indicator(
+  title = 'Breakout after Release',
+  shorttitle = 'BaR',
+  format = format.price,
+  precision = 6,
+  max_labels_count = 500,
+  overlay = true)
+
+//----------------------------------------------------------------------------------------------------------------------
+// Input
+//----------------------------------------------------------------------------------------------------------------------
+
+// Strategy
+useEntrySqz = input.bool(
+  defval = true, 
+  title = 'Entry on Release', 
+  group = 'Entry Strategy')
+useEntryBreakout = input.bool(
+  defval = true, 
+  title = 'Entry after Breakout S/R', 
+  group = 'Entry Strategy')
+useEntrySqzBars = input.int(
+  defval = 6, 
+  title = 'Minimum squeeze bars, 0 to disable', 
+  group = 'Entry Strategy')
+useExitSqz = input.bool(
+  defval = true, 
+  title = 'Exit on Squeeze', 
+  group = 'Exit Strategy')
+useExitAlligator = input.bool(
+  defval = true, 
+  title = 'Exit If Alligator Sleep', 
+  group = 'Exit Strategy')
+trailDeviationPercent = input.float(
+  defval = 3,
+  minval = 0,
+  step = 0.1,
+  title = 'Trailing Deviation (%), 0 to disable',
+  group = 'Exit Strategy')
+stopLossPercent = input.float(
+  defval = 0.5,
+  minval = 0,
+  step = 0.1,
+  title = 'Stop Loss (%), 0 to disable',
+  group = 'Exit Strategy')
+trailingAtrLength = input.int(
+  defval = 21,
+  title = 'Trailing Stop ATR, 0 to disable',
+  group = 'Exit Strategy')
+trailingAtrMultiplier = input.float(
+  defval = 3,
+  minval = 0,
+  step = 0.1,
+  title = 'Stop ATR Multiplier, 0 to disable',
+  group = 'Exit Strategy')
+
+// Support Resistance
+showSR = input.bool(
+  defval = true, 
+  title = 'Show Support/Resistance', 
+  group = 'Support Resistance')
+depth = input.int(
+  defval = 12,
+  title = 'Depth',
+  minval = 2,
+  step = 1,
+  group = 'Support Resistance')
+deviation = input.int(
+  defval = 5, 
+  title = 'Deviation',
+  minval = 1,
+  step = 1,
+  group = 'Support Resistance')
+backstep = input.int(
+  defval = 3, 
+  title = 'Backstep',
+  minval = 2,
+  step = 1,
+  group = 'Support Resistance')
+
+// Bollinger Bands
+showBB = input.bool(
+  defval = false, 
+  title = 'Show Bollinger Bands', 
+  group = 'Bollinger Bands')
+lengthBB = input.int(
+  defval = 20, 
+  title = "Length",
+  group = 'Bollinger Bands')
+multBB = input.float(
+  defval = 2.0,
+  title = 'StdDev',
+  minval = 0.001, 
+  maxval = 50,
+  step = 0.1,
+  group = 'Bollinger Bands')
+
+// Keltner Channel
+showKC = input.bool(
+  defval = false, 
+  title = 'Show Keltner Channel', 
+  group = 'Keltner Channel')
+lengthKC = input.int(
+  defval = 20, 
+  title = "Length",
+  group = 'Keltner Channel')
+multKC = input.float(
+  defval = 1.5, 
+  step = 0.1,
+  title="Multiplier",
+  group = 'Keltner Channel')
+expKC = input.bool(
+  defval = true, 
+  title = "Use Exponential MA",
+  group = 'Keltner Channel')
+bandsStyleKC = input.string(
+  defval = 'Average True Range', 
+  options = ['Average True Range', 'True Range', 'Range'], 
+  title = 'Bands Style',
+  group = 'Keltner Channel')    
+atrlengthKC = input.int(
+  defval = 20, 
+  title = 'ATR Length',
+  group = 'Keltner Channel')
+
+// Donchian Channel
+showDC = input.bool(
+  defval = false, 
+  title = 'Show Donchian Channel', 
+  group = 'Donchian Channel')
+lengthDC = input.int(
+  defval = 20, 
+  title = "Length",
+  group = 'Donchian Channel')
+
+// Squeeze Momentum
+showSqz = input.bool(
+  defval = true, 
+  title = 'Show Squeeze Momentum', 
+  group = 'Squeeze Momentum')
+
+// Williams Alligator
+showAlligator = input.bool(
+  defval = false, 
+  title = 'Show Williams Alligator', 
+  group = 'Williams Alligator')
+lengthJaw = input.int(
+  defval = 21, 
+  minval = 1, 
+  title = 'Jaw Length', 
+  group = 'Williams Alligator')
+lengthTeeth = input.int(
+  defval = 13, 
+  minval = 1, 
+  title = 'Teeth Length', 
+  group = 'Williams Alligator')
+lengthLips = input.int(
+  defval = 8, 
+  minval = 1, 
+  title = 'Lips Length', 
+  group = 'Williams Alligator')
+
+// Trade Stats
+showTrade = input.bool(
+  defval = true, 
+  title = 'Show Trade', 
+  group = 'Trade')
+showTradeFill = input.bool(
+  defval = true, 
+  title = 'Show Trade Fill Area', 
+  group = 'Trade')
+// Trailing High Low
+showHLPrice = input.bool(
+  defval = false,
+  title = 'Show Trailing',
+  group = 'Trade')
+showProfit = input.bool(
+  defval = true, 
+  title = 'Show Trade Stats',
+  group = 'Trade')
+sumPeriod = input.int(
+  defval = 500,
+  title = 'Show Trade Stats Period',
+  group = 'Trade')
+
+//----------------------------------------------------------------------------------------------------------------------
+// Calculation
+//----------------------------------------------------------------------------------------------------------------------
+
+// Calculate Bollinger Bands
+float basis = ta.sma(close, lengthBB)
+float dev = multBB *  ta.stdev(close, lengthBB)
+float upperBB = basis + dev
+float lowerBB = basis - dev
+
+// Calculate Keltner Channel
+esma(close, lengthKC) =>
+    float s = ta.sma(close, lengthKC)
+    float e = ta.ema(close, lengthKC)
+    expKC ? e : s
+float ma = esma(close, lengthKC)
+float rangema = switch(bandsStyleKC)
+    'True Range' => ta.tr(true)
+    'Average True Range' => ta.atr(atrlengthKC) 
+    'Range' => ta.rma(high - low, lengthKC)
+
+float upperKC = ma + rangema * multKC
+float lowerKC = ma - rangema * multKC
+
+// Calculate Donchian Channel
+float upperDC = ta.highest(high, lengthDC)
+float lowerDC = ta.lowest(low, lengthDC)
+float middleDC = math.avg(upperDC, lowerDC)
+
+// Calculate Delta Value
+float smaDC = ta.sma(close, lengthDC)
+float deltaMom = close - math.avg(middleDC, smaDC)
+
+// Smooth Delta with Regression
+float val = ta.linreg(deltaMom, lengthDC, 0)
+bool isLong = val > 0
+bool isShort = val <= 0
+bool isBullish = val > nz(val[1])
+bool isBearish = val <= nz(val[1])
+
+// Calculate Squeeze Momentum
+var int noSqzBars = 0
+var int barsinceSqz = na
+var int sqzType = na
+barsinceSqz := barstate.isfirst ? na : barsinceSqz[1]
+sqzType := barstate.isfirst ? 0 : sqzType[1]
+
+bool sqzOn  = (lowerBB > lowerKC) and (upperBB < upperKC)
+bool sqzOff = (lowerBB < lowerKC) and (upperBB > upperKC)
+bool noSqz  = (sqzOn == false) and (sqzOff == false)
+// Squeeze Type
+// 0 = no squeeze
+// 1 = Squeeze on strong bullish
+// 2 = Squezze on weak bullish
+// 3 = Squezze on strong bearish
+// 4 = Squezze on weak bearish
+sqzType := sqzOn ? isLong ? isBullish ? 1 : 2 : isBearish ? 3 : 4 : 0
+noSqzBars := sqzOn ? noSqzBars + 1 : 0
+barsinceSqz := noSqzBars == 0 ? barsinceSqz[1] : noSqzBars
+sqzType := noSqzBars == 0 ? sqzType[1] : sqzType
+
+// Calculate Support and Resistance with Zigzag
+var int resistanceBarIndex = 1
+resistanceBarIndex += 1
+var int supportBarIndex = 1
+supportBarIndex += 1
+var int lowestBarIndex = 1
+var int highestBarIndex = 1
+lowestBarIndex := lowestBarIndex + 1
+highestBarIndex := highestBarIndex + 1
+lowestBars = -ta.lowestbars(depth)
+highestBars = -ta.highestbars(depth)
+bool isLowing = (lowestBarIndex == lowestBars) or (low - low[lowestBars]) > (deviation * syminfo.mintick)
+bool isHighing = (highestBarIndex == highestBars) or (high[highestBars] - high) > (deviation * syminfo.mintick)
+int barsinceNotHigher = ta.barssince(not isHighing)
+int barsinceNotLower = ta.barssince(not isLowing)
+bool down = ta.barssince(not(barsinceNotHigher > barsinceNotLower)) >= backstep
+isLower = low[lowestBarIndex] > low[lowestBars]
+isHigher = high[highestBarIndex] < high[highestBars]
+isNewPivotDown = lowestBarIndex != lowestBars and (not down[1] or isLower)
+isNewPivotUp = highestBarIndex != highestBars and (down[1] or isHigher)
+lowestBarIndex := isNewPivotDown ? lowestBars < highestBarIndex ? lowestBars : 0 : lowestBarIndex
+highestBarIndex := isNewPivotUp ? highestBars < lowestBarIndex ? highestBars : 0 : highestBarIndex
+
+bool changeTrend = down != down[1]
+resistanceBarIndex := changeTrend and down ? highestBarIndex : resistanceBarIndex
+supportBarIndex := changeTrend and not down ? lowestBarIndex : supportBarIndex
+
+// Calculation Alligator
+// Function from built in Technical Analysis SMA
+float valueJaw = ta.sma(close, lengthJaw)
+float valueTeeth = ta.sma(close, lengthTeeth)
+float valueLips = ta.sma(close, lengthLips)
+
+aligatorUp = valueLips > valueJaw and valueLips > valueTeeth
+aligatorDown = valueLips < valueJaw and valueLips < valueTeeth
+aligatorSleepUp = valueLips > valueTeeth
+aligatorSleepDown = valueLips < valueTeeth
+
+// Calculation Strategy
+var bool posLong = na
+var bool posShort = na
+var float priceLong = na
+var float priceShort = na
+var float priceExitLong = na
+var float priceExitShort = na
+var int barSincePosLong = na
+var int barSincePosShort = na
+var int highestPosBars = na
+var float highestValue = na
+var int lowestPosBars = na
+var float lowestValue = na
+
+// Initialize position
+posLong := barstate.isfirst ? false : posLong[1]
+posShort := barstate.isfirst ? false : posShort[1]
+barSincePosLong := barstate.isfirst ? na : barSincePosLong[1]
+barSincePosShort := barstate.isfirst ? na : barSincePosShort[1]
+highestPosBars := barstate.isfirst ? na : highestPosBars[1]
+lowestPosBars := barstate.isfirst ? na : lowestPosBars[1]
+highestValue := barstate.isfirst ? na : highestValue[1]
+lowestValue := barstate.isfirst ? na : lowestValue[1]
+
+float atrVal = trailingAtrLength > 0 ? ta.atr(trailingAtrLength) : 0
+float atrMultiplied = trailingAtrLength > 0 and trailingAtrMultiplier > 0 ? atrVal * trailingAtrMultiplier : na
+
+// Entry Long
+bool longEntrySqz = useEntrySqz ? isLong and isBullish and sqzOff : true
+bool longEntryBreakout = useEntryBreakout ? close > high[resistanceBarIndex] : true
+bool longEntrySqzBars = isLong and useEntrySqzBars > 0 and barsinceSqz >= useEntrySqzBars ? true : false
+bool isEntryLong = longEntrySqz and longEntryBreakout and longEntrySqzBars
+
+// Entry Short
+bool shortEntrySqz = useEntrySqz ? isShort and isBearish and sqzOff : true
+bool shortEntryBreakout = useEntryBreakout ? close < low[supportBarIndex]  : true
+bool shortEntrySqzBars = isShort and useEntrySqzBars > 0 and barsinceSqz >= useEntrySqzBars ? true : false
+bool isEntryShort = shortEntrySqz and shortEntryBreakout and shortEntrySqzBars
+
+// Exit Long
+//bool longExitStopLoss = stopLossPercent > 0 and isLong and 
+bool longExitSqz = useExitSqz ? isShort or sqzOn : false
+bool longExitAlligator = useExitAlligator ? aligatorDown or aligatorSleepDown : false
+float currentHighest = not na(highestValue) ? high > highestValue ? high : highestValue : na
+float dropBase = posLong and not na(priceLong[1]) and priceLong[1] < low ? priceLong[1] - low : 0
+float dropBasePercent = dropBase > 0 and not na(priceLong[1]) ? (dropBase / priceLong[1]) * 100.0 : 0
+bool longExitBase = dropBasePercent > 0 and dropBasePercent > stopLossPercent ? true : false 
+float dropPoint = not na(currentHighest) and currentHighest > low ? currentHighest - low : 0
+float dropPercent = dropPoint > 0 and currentHighest > 0 ? (dropPoint / currentHighest) * 100.0 : 0
+bool longExitTrailing = trailDeviationPercent > 0 and posLong and dropPercent > trailDeviationPercent ? true : false
+bool longExitAtr = not na(atrMultiplied) ? dropPoint > atrMultiplied ? true : false : false
+bool isExitLong = longExitSqz or longExitAlligator or longExitTrailing or longExitAtr or longExitBase
+
+// Exit Short
+bool shortExitSqz = useExitSqz ? isLong or sqzOn : false
+bool shortExitAlligator = useExitAlligator ? aligatorUp or aligatorSleepUp : false
+float currentLowest = not na(lowestValue) ? low < lowestValue ? low : lowestValue : na
+float upBase = posShort and not na(priceShort[1]) and priceShort[1] > high ? high - priceShort[1] : 0
+float upBasePercent = upBase > 0 and not na(priceShort[1]) ? (upBase / priceShort[1]) * 100.0 : 0
+bool shortExitBase = upBasePercent > 0 and upBasePercent > stopLossPercent ? true : false 
+float upPoint = not na(currentLowest) and currentLowest < high ? high - currentLowest : 0
+float upPercent = upPoint > 0 and currentLowest > 0 ? (upPoint / currentLowest) * 100.0 : 0
+bool shortExitTrailing = trailDeviationPercent > 0 and posShort and upPercent > trailDeviationPercent ? true : false
+bool shortExitAtr = not na(atrMultiplied) ? upPoint > atrMultiplied ? true : false : false
+
+bool isExitShort = shortExitSqz or shortExitAlligator or shortExitTrailing or shortExitAtr or shortExitBase
+
+// Signal
+bool entryLong = isEntryLong and not posLong
+bool entryShort = isEntryShort and not posShort
+bool exitLong = (isExitLong and posLong) or (entryShort and posLong) or (isShort and posLong) 
+bool exitShort = (isExitShort and posShort) or (entryLong and posShort) or (isLong and posShort)
+
+alertcondition(entryLong, title="Entry Long", message="Entry Long")
+alertcondition(entryShort, title="Entry Short", message="Entry Short")
+alertcondition(exitLong, title="Exit Long", message="Exit Long")
+alertcondition(exitShort, title="Exit Short", message="Exit Short")
+
+// Update position
+posLong := entryLong ? true : exitLong ? false : posLong
+posShort := entryShort ? true : exitShort ? false : posShort
+
+// Reset Bar Since Sqz
+barsinceSqz := entryLong or entryShort ? 0 : barsinceSqz
+
+// Record Trade History
+// Long
+bool atLong = posLong or exitLong
+barSincePosLong := atLong ? posLong[1] ? barSincePosLong + 1 : 0 : na
+// initialize highest value
+if atLong and barSincePosLong == 0
+    highestValue := close
+    highestPosBars := 0
+else if atLong and barSincePosLong > 0
+    bool newHigh = high > highestValue
+    highestValue := newHigh ? high : highestValue
+    highestPosBars := newHigh ? 0 : highestPosBars + 1
+else
+    highestValue := na
+    highestPosBars := na
+// Short
+bool atShort = posShort or exitShort
+barSincePosShort := atShort ? posShort[1] ? barSincePosShort + 1 : 0 : na
+if atShort and barSincePosShort == 0
+    lowestValue := close
+    lowestPosBars := 0
+else if atShort and barSincePosShort > 0
+    bool newLow = low < lowestValue
+    lowestValue := newLow ? low : lowestValue
+    lowestPosBars := newLow ? 0 : lowestPosBars + 1
+else 
+    lowestValue := na
+    lowestPosBars := na
+
+// Record Price History
+priceLong := entryLong ? close : posLong or exitLong ? priceLong[1] : na
+priceShort := entryShort ? close : posShort or exitShort ? priceShort[1] : na
+priceExitLong := posLong or exitLong ? close : na
+priceExitShort := posShort or exitShort ? close : na
+
+// Calclulate Profit Trade
+float profitLong = exitLong ? (priceExitLong - priceLong) / priceLong  : na
+float profitShort = exitShort ? (priceShort - priceExitShort) / priceShort: na
+float profit = not na(profitShort) ? profitShort : not na(profitLong) ? profitLong : na
+
+// Calculate Trade Statistics
+sumLong = math.sum(not na(profitLong) ? profitLong : 0.0, sumPeriod) 
+countLong = math.sum(not na(profitLong) ? 1 : 0, sumPeriod)
+avgLong = countLong > 0 ? sumLong / countLong : 0
+winLong = math.sum(not na(profitLong) and profitLong > 0 ? 1 : 0, sumPeriod)
+
+sumShort = math.sum(not na(profitShort) ? profitShort : 0.0, sumPeriod)
+countShort = math.sum(not na(profitShort) ? 1 : 0, sumPeriod)
+avgShort = countShort > 0 ? sumShort / countShort : 0
+winShort = math.sum(not na(profitShort) and profitShort > 0 ? 1 : 0, sumPeriod)
+
+sumTrade = sumLong + sumShort
+countTrade = countLong + countShort
+avgTrade = countTrade > 0 ? sumTrade / countTrade : 0
+winTrade = winLong + winShort
+lossTrade = countTrade - winTrade
+winrate = countTrade > 0 ? winTrade / countTrade : 0
+
+//----------------------------------------------------------------------------------------------------------------------
+// Plot
+//----------------------------------------------------------------------------------------------------------------------
+// Plot Bollinger Bands
+plot(upperBB, title = 'Upper Bollinger Bands', color = showBB ? color.new(color.white, 0) : na)
+plot(lowerBB, title = 'Lower Bollinger Bands', color = showBB ? color.new(color.white, 0) : na)
+
+// Plot Keltner Channel
+plot(upperKC, title = 'Upper Keltner Channel', color = showBB ? color.new(color.blue, 0) : na)
+plot(lowerKC, title = 'Lower Keltner Channel', color = showBB ? color.new(color.blue, 0) : na)
+
+// Plot Squeeze Momentum
+bcolor = isLong 
+  ? isBullish 
+     ? color.new(color.lime, 0) 
+     : color.new(color.blue, 0) 
+  : isBearish 
+     ? color.new(color.red, 0) 
+     : color.new(color.orange, 0)
+scolor = noSqz ? color.new(color.black, 0) : sqzOn ? color.new(color.fuchsia, 0)  : color.new(color.navy, 0)
+plotshape(showSqz, title = 'Value', style = shape.circle, color = bcolor, location = location.bottom, size = size.tiny)
+plotshape(showSqz, title = 'Squeeze', style = shape.circle, color = scolor, location = location.top, size = size.tiny)
+
+// Plot Alligator
+plot(valueJaw,  title = 'Jaw', color = showAlligator ? color.new(color.blue, 0) : na, linewidth = 1)
+plot(valueTeeth, title = 'Teeth', color = showAlligator ? color.new(color.red, 0) : na, linewidth = 1)
+plot(valueLips, title = 'Lips', color = showAlligator ? color.new(color.green, 0) : na, linewidth = 1)
+
+// Plot Support and Resistance
+bool unchangedHigh = ta.change(high[highestBarIndex]) == 0
+colorHighest = not showSR ? na : not unchangedHigh ? na : color.new(color.blue, 80)
+plot(high[highestBarIndex], title = 'Resistance (unconfirmed)', color = colorHighest, style = plot.style_circles)
+
+bool unchangedResistance = ta.change(high[resistanceBarIndex]) == 0
+colorResistance = not showSR ? na : not unchangedResistance ? na : color.new(color.lime, 40)
+plot(high[resistanceBarIndex], title = 'Resistance', color = colorResistance, style = plot.style_circles)
+
+bool unchangedLow = ta.change(low[lowestBarIndex]) == 0
+colorLowest = not showSR ? na : not unchangedLow ? na : color.new(color.orange, 80)
+plot(low[lowestBarIndex], title = 'Support (unconfirmed)', color = colorLowest, style = plot.style_circles)
+
+bool unchangedSupport = ta.change(low[supportBarIndex]) == 0
+colorSupport = not showSR ? na : not unchangedSupport ? na : color.new(color.red, 40)
+plot(low[supportBarIndex], title = 'Support', color = colorSupport, style = plot.style_circles)
+
+// Plot Trade
+colorPriceLong(_price) => showTrade ? not na(_price) ? color.new(color.green, 60) : na : na
+colorPriceShort(_price) => showTrade ? not na(_price) ? color.new(color.red, 60) : na : na
+colorBase(_price) => showTrade ? not na(_price) ? color.new(color.gray, 70) : na : na
+var lineLong = plot(priceLong, title = 'Entry Price Long', color = colorPriceLong(priceLong), style = plot.style_linebr)
+var lineShort = plot(priceShort, title = 'Entry Price Short', color = colorPriceShort(priceShort), style = plot.style_linebr)
+var lineBaseLong = plot(priceExitLong, title = 'Close Price', color = colorBase(priceExitLong), style = plot.style_linebr)
+var lineBaseShort = plot(priceExitShort, title = 'Close Price', color = colorBase(priceExitShort), style = plot.style_linebr)
+
+color colorFillLong = not showTradeFill ? na : priceExitLong >= priceLong
+  ? color.new(color.green, 85)
+  : color.new(color.red, 85)
+fill(lineLong, lineBaseLong, title = 'Fill Long', color = colorFillLong)
+
+color colorFillShort = not showTradeFill ? na : priceExitShort <= priceShort 
+  ? color.new(color.green, 85)
+  : color.new(color.red, 85)
+fill(lineShort, lineBaseShort, title = 'Fill Short', color = colorFillShort)
+
+// Plot Signal
+plotshape(
+  entryLong, 
+  title = 'Signal Entry Long',
+  style = shape.triangleup, 
+  color = color.new(color.lime, 20), 
+  location = location.belowbar, 
+  size = size.tiny)
+plotshape(
+  exitLong,
+  title = 'Signal Exit Long',
+  style = shape.xcross, 
+  color = color.new(color.lime, 20),
+  location = location.belowbar, 
+  size = size.tiny)
+plotshape(
+  entryShort, 
+  title = 'Signal Entry Short',
+  style = shape.triangledown, 
+  color = color.new(color.red, 20), 
+  location = location.abovebar, 
+  size = size.tiny)
+plotshape(
+  exitShort, 
+  title = 'Signal Exit Short',
+  style = shape.xcross, 
+  color = color.new(color.red, 20), 
+  location = location.abovebar, 
+  size = size.tiny)
+
+// Plot Trade Stats
+float atr1 = ta.atr(1)
+float trailingAtrHigh = posLong and not na(highestValue) ? highestValue - atrMultiplied : na
+float trailingAtrLow = posShort and not na(lowestValue) ? lowestValue + atrMultiplied : na
+colorHLPrice = showHLPrice ? color.silver : na
+plot(highestValue, title = 'Highest', color = colorHLPrice, style = plot.style_linebr)
+plot(trailingAtrHigh, title = 'Highest - ATR', color = colorHLPrice, style = plot.style_linebr)
+plot(lowestValue, title = 'Lowest', color = colorHLPrice, style = plot.style_linebr)
+plot(trailingAtrLow, title = 'Lowest + ATR', color = colorHLPrice, style = plot.style_linebr)
+
+if showTrade and not na(profit)
+    int noBarTrade = not na(profitLong) ? barSincePosLong : not na(profitShort) ? barSincePosShort : 0
+    labelTrade = profit > 0 
+      ? str.format("Win: {0,number,#.##}%", profit*100) 
+      : str.format("Loss: {0,number,#.##}%", profit*100)
+    labelTrade := labelTrade + str.format('\nTrade within {0} bars', noBarTrade)
+    labelTrade := labelTrade +'\nReason:'
+    if (exitLong and longExitSqz) or (exitShort and shortExitSqz)
+        labelTrade := labelTrade + '\n- Squezze Condition'
+    if exitLong and longExitAlligator
+        labelTrade := labelTrade + '\n- Alligator down or sleep'
+    if (exitLong and longExitBase) or (exitShort and shortExitBase)
+        labelTrade := labelTrade + '\n- Stop Loss Percentage'
+    if (exitLong and longExitAtr) or (exitShort and shortExitAtr)
+        labelTrade := labelTrade + '\n- Stop Loss ATR'
+    if (exitLong and longExitTrailing) or (exitShort and shortExitTrailing)
+        labelTrade := labelTrade + '\n- Trailing Deviation'
+    if exitShort and shortExitAlligator
+        labelTrade := labelTrade + '\n- Alligator up or sleep'
+
+    label.new(
+      x = bar_index,
+      y = exitLong ? low - atr1 : high + atr1,
+      xloc = xloc.bar_index,
+      yloc = exitLong ? yloc.belowbar : yloc.abovebar,
+      text = na(profit) ? na : labelTrade,
+      textcolor = na(profit) ? na : profit > 0 ? color.lime : color.orange,
+      size = size.normal,
+      textalign = text.align_right,
+      style = label.style_none)
+
+colorBg = color.new(color.blue, 90)
+colorText = color.white
+
+updateCellTitle(_tbl, _x, _y, _text) => 
+    table.cell(_tbl, _x, _y, _text, 
+      text_halign = text.align_left, 
+      bgcolor=colorBg, 
+      text_color = colorText, 
+      text_size=size.normal)
+
+updateCellData(_tbl, _x, _y, _text) => 
+    table.cell(_tbl, _x, _y, _text, 
+      text_halign = text.align_right, 
+      bgcolor = colorBg, 
+      text_color = colorText, 
+      text_size = size.normal)
+
+init_table(_tbl) =>
+    updateCellTitle(_tbl, 0, 0, str.format('Trade Stats Last {0, number, #} bars', sumPeriod))
+    updateCellTitle(_tbl, 0, 1, 'Average Profit Long')
+    updateCellTitle(_tbl, 0, 2, 'Average Profit Short')
+    updateCellTitle(_tbl, 0, 3, 'Average Profit')
+    updateCellTitle(_tbl, 0, 4, 'Sum Profit')
+    updateCellTitle(_tbl, 0, 5, 'Winrate')
+
+update_table(_tbl, _avgLong, _avgShort, _avg, _sum, _winrate) =>
+    updateCellData(_tbl, 1, 1, str.tostring(_avgLong, '#.##%'))
+    updateCellData(_tbl, 1, 2, str.tostring(_avgShort, '#.##%'))
+    updateCellData(_tbl, 1, 3, str.tostring(_avg, '#.##%'))
+    updateCellData(_tbl, 1, 4, str.tostring(_sum, '#.##%'))
+    updateCellData(_tbl, 1, 5, str.tostring(_winrate, '#.##%'))
+
+if showProfit
+    var tbl = table.new(
+      position.top_right, 
+      columns = 2, 
+      rows = 6, 
+      frame_color=color.new(color.white, 80), 
+      frame_width = 1, 
+      border_width = 1, 
+      border_color = color.gray)
+    if barstate.isfirst
+        init_table(tbl) 
+    if barstate.islast
+        update_table(tbl, avgLong, avgShort, avgTrade, sumTrade, winrate)
